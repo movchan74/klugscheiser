@@ -1,7 +1,4 @@
-# Copyright 2023-2024 Deepgram SDK contributors. All Rights Reserved.
-# Use of this source code is governed by a MIT license that can be found in the LICENSE file.
-# SPDX-License-Identifier: MIT
-
+import argparse  # New import
 import logging
 import os
 import queue
@@ -11,36 +8,29 @@ import time
 import pyttsx3
 from deepgram import (
     DeepgramClient,
-    DeepgramClientOptions,
     LiveOptions,
     LiveTranscriptionEvents,
     Microphone,
 )
-from deepgram.utils import verboselogs
 from dotenv import load_dotenv
 from openai import OpenAI
 
 load_dotenv()
-
-task = "translation"
-# language = "de"
-# language = "zh"
-language = "ru"
-# task = "klugscheiser"
 
 # Configure logger with timestamp
 logging.basicConfig(
     format="%(asctime)s - %(levelname)s - %(message)s", level=logging.INFO
 )
 
-# We will collect the is_final=true messages here so we can use them when the person finishes speaking
-is_finals = []
+previous_text = ""
 
 # Initialize OpenAI client
 openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 # Create a queue to hold the texts
 audio_queue = queue.Queue()
+
+MODEL = "gpt-4o"
 
 
 def audio_worker():
@@ -66,12 +56,9 @@ def play_audio(text):
 
 def process_translation(text):
     try:
-        logging.info("Received Chinese text: %s", text)
         start_time = time.time()
         translation_response = openai_client.chat.completions.create(
-            # model="gpt-3.5-turbo",
-            # model="gpt-4o-mini",
-            model="gpt-4o",
+            model=MODEL,
             messages=[
                 {
                     "role": "system",
@@ -96,8 +83,7 @@ def process_translation(text):
 
 def answer_question(context, question):
     answer_response = openai_client.chat.completions.create(
-        # model="gpt-3.5-turbo",
-        model="gpt-4o-mini",
+        model=MODEL,
         messages=[
             {
                 "role": "system",
@@ -140,6 +126,19 @@ def process_question(text):
 
 
 def main():
+    parser = argparse.ArgumentParser(description="Run translation or klugscheiser.")
+    parser.add_argument(
+        "--task",
+        default="klugscheiser",
+        choices=["translation", "klugscheiser"],
+        help="Task type.",
+    )
+    parser.add_argument("--language", default="ru", help="Language code.")
+    args = parser.parse_args()
+
+    task = args.task
+    language = args.language
+
     try:
         deepgram: DeepgramClient = DeepgramClient()
 
@@ -149,7 +148,6 @@ def main():
             logging.info("Connection Open")
 
         def on_message(self, result, **kwargs):
-            global is_finals
             # print(f"Message: {result.to_json()}")
             sentence = result.channel.alternatives[0].transcript
             if len(sentence) == 0:
@@ -157,7 +155,14 @@ def main():
             if result.is_final:
                 # print(f"Message: {result.to_json()}")
                 logging.info("Speech Final: %s", sentence)
-                threading.Thread(target=process_translation, args=(sentence,)).start()
+                if task == "klugscheiser":
+                    threading.Thread(target=process_question, args=(sentence,)).start()
+                elif task == "translation":
+                    threading.Thread(
+                        target=process_translation, args=(sentence,)
+                    ).start()
+                else:
+                    logging.error("Invalid task")
             else:
                 logging.info("Interim Results: %s", sentence)
 
@@ -211,9 +216,14 @@ def main():
         if task == "klugscheiser":
             options.model = "nova-3"
             options.language = "en-US"
+            logging.info("Klugscheiser mode")
         elif task == "translation":
             options.model = "nova-2"
             options.language = language
+            logging.info(f"Translation mode from {language}")
+        else:
+            logging.error("Invalid task")
+            return
 
         addons = {
             # Prevent waiting for additional numbers
