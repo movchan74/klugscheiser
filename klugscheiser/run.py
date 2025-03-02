@@ -17,17 +17,16 @@ from openai import OpenAI
 
 load_dotenv()
 
-# Configure logger with timestamp
+
 logging.basicConfig(
     format="%(asctime)s - %(levelname)s - %(message)s", level=logging.INFO
 )
 
 previous_text = ""
 
-# Initialize OpenAI client
+
 openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-# Create a queue to hold the texts
 audio_queue = queue.Queue()
 
 MODEL = "gpt-4o"
@@ -38,18 +37,16 @@ def audio_worker():
     while True:
         text = audio_queue.get()
         if text is None:
-            break  # Exit the loop if None is received
+            break
         engine.say(text)
         engine.runAndWait()
         audio_queue.task_done()
     engine.stop()
 
 
-# Start the audio thread
 threading.Thread(target=audio_worker, daemon=True).start()
 
 
-# Function to add text to the queue
 def play_audio(text):
     audio_queue.put(text)
 
@@ -64,8 +61,7 @@ def process_translation(text):
                     "role": "system",
                     "content": (
                         "You are a translation assistant. Translate the following text to English. "
-                        # "You are a translation assistant. Translate the following Chinese text to English. "
-                        "The transcription might not be perfect, try to understand the meaning."
+                        "The transcription might not be perfect, try to understand the meaning. "
                         "Respond with the translated text only."
                     ),
                 },
@@ -153,7 +149,6 @@ def main():
             if len(sentence) == 0:
                 return
             if result.is_final:
-                # print(f"Message: {result.to_json()}")
                 logging.info("Speech Final: %s", sentence)
                 if task == "klugscheiser":
                     threading.Thread(target=process_question, args=(sentence,)).start()
@@ -190,27 +185,14 @@ def main():
         dg_connection.on(LiveTranscriptionEvents.Unhandled, on_unhandled)
 
         options: LiveOptions = LiveOptions(
-            # model="nova-3",
-            # model="nova-2",
-            # language="en-US",
-            # language="zh",
-            # language="ru",
-            # language="de",
-            # Apply smart formatting to the output
             smart_format=True,
-            # Raw audio format details
             encoding="linear16",
             channels=1,
             sample_rate=16000,
-            # To get UtteranceEnd, the following must be set:
             interim_results=True,
-            # interim_results=False,
             utterance_end_ms="1000",
-            # utterance_end_ms="500",
             vad_events=True,
-            # Time in milliseconds of silence to wait for before finalizing speech
             endpointing=100,
-            # endpointing=300,
         )
 
         if task == "klugscheiser":
@@ -225,29 +207,21 @@ def main():
             logging.error("Invalid task")
             return
 
-        addons = {
-            # Prevent waiting for additional numbers
-            "no_delay": "true"
-        }
+        addons = {"no_delay": "true"}
 
         logging.info("\n\nPress Enter to stop recording...\n\n")
         if dg_connection.start(options, addons=addons) is False:
             logging.error("Failed to connect to Deepgram")
             return
 
-        # Open a microphone stream on the default input device
         microphone = Microphone(dg_connection.send)
 
-        # start microphone
         microphone.start()
 
-        # wait until finished
         input("")
 
-        # Wait for the microphone to close
         microphone.finish()
 
-        # Indicate that we've finished
         dg_connection.finish()
 
         logging.info("Finished")
