@@ -232,9 +232,9 @@
             // Construct the WebSocket URI.
             let wsUri = "";
             if (task === "translation") {
-                wsUri = `ws://${server}:${port}/${task}/${language}`;
+                wsUri = `wss://${server}:${port}/${task}/${language}`;
             } else {
-                wsUri = `ws://${server}:${port}/${task}`;
+                wsUri = `wss://${server}:${port}/${task}`;
             }
 
             // Open the WebSocket.

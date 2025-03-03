@@ -10,7 +10,6 @@ dependencies = [
     "ipykernel>=6.29.5",
     "numpy>=2.2.3",
     "openai>=1.65.1",
-    "pyaudio",
     "pyttsx3>=2.98",
     "sounddevice>=0.5.1",
 ]

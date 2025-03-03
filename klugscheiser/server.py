@@ -11,6 +11,7 @@ import asyncio
 import json
 import logging
 import os
+import ssl  # Added for https support
 import time
 from typing import Dict, Optional, Tuple
 
@@ -253,31 +254,60 @@ async def handle_client_html(request):
     return web.FileResponse(html_path)
 
 
-async def start_http_server(http_port: int):
+async def start_http_server(
+    http_port: int, ssl_context: Optional[ssl.SSLContext] = None
+):
     app = web.Application()
     app.router.add_get("/", handle_client_html)
     runner = web.AppRunner(app)
     await runner.setup()
-    site = web.TCPSite(runner, "localhost", http_port)
+    # Pass ssl_context to the TCPSite for https.
+    site = web.TCPSite(runner, "0.0.0.0", http_port, ssl_context=ssl_context)
     await site.start()
-    logging.info("HTTP Server started at http://localhost:%s", http_port)
-    # Keep the HTTP server running forever.
+    logging.info(
+        "HTTP Server started at %s://localhost:%s",
+        "https" if ssl_context else "http",
+        http_port,
+    )
     while True:
         await asyncio.sleep(3600)
 
 
-async def main(ws_port: int, http_port: int) -> None:
-    # Start both WebSocket and HTTP servers concurrently
-    ws_server = websockets.serve(handle_client, "localhost", ws_port)
-    await asyncio.gather(ws_server, start_http_server(http_port))
+async def main(
+    ws_port: int, http_port: int, ssl_context: Optional[ssl.SSLContext] = None
+) -> None:
+    # Start both WebSocket and HTTP servers concurrently,
+    # pass ssl_context to enable https and secure websockets (wss) on both.
+    ws_server = websockets.serve(handle_client, "0.0.0.0", ws_port, ssl=ssl_context)
+    await asyncio.gather(ws_server, start_http_server(http_port, ssl_context))
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Audio processing server")
     parser.add_argument("--ws-port", type=int, default=8765, help="WebSocket port")
     parser.add_argument("--http-port", type=int, default=8001, help="HTTP port")
+    # New arguments for SSL certificate and key.
+    parser.add_argument(
+        "--ssl-cert", type=str, help="Path to SSL certificate file", default=None
+    )
+    parser.add_argument(
+        "--ssl-key", type=str, help="Path to SSL key file", default=None
+    )
     args = parser.parse_args()
+
+    # Create SSL context if both certificate and key are provided.
+    ssl_context = None
+    if args.ssl_cert and args.ssl_key:
+        ssl_context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
+        try:
+            ssl_context.load_cert_chain(certfile=args.ssl_cert, keyfile=args.ssl_key)
+        except PermissionError as e:
+            logging.error("Permission denied loading SSL certificate: %s", e)
+            import sys
+
+            sys.exit(1)
+
     try:
-        asyncio.run(main(args.ws_port, args.http_port))
+        asyncio.run(main(args.ws_port, args.http_port, ssl_context))
     except KeyboardInterrupt:
         logging.info("Server shutdown via KeyboardInterrupt")
