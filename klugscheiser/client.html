@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <title>Klugscheiser</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #34495e, #2c3e50);
+            margin: 0;
+            padding: 0;
+            color: #ecf0f1;
+            animation: fadeIn 1.5s ease-in;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 40px auto;
+            padding: 20px;
+            background: rgba(44, 62, 80, 0.85);
+            border-radius: 10px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+            animation: slideDown 0.8s ease-out;
+        }
+
+        h1 {
+            text-align: center;
+            font-size: 2.5rem;
+            margin-bottom: 20px;
+        }
+
+        label,
+        select {
+            display: block;
+            margin: 15px 0 5px;
+            font-size: 1.1rem;
+        }
+
+        button {
+            background: #e74c3c;
+            border: none;
+            color: #fff;
+            padding: 10px 20px;
+            font-size: 1rem;
+            border-radius: 4px;
+            margin: 10px 5px 0 0;
+            cursor: pointer;
+            transition: background 0.3s, transform 0.2s;
+        }
+
+        button:hover:not(:disabled) {
+            background: #c0392b;
+            transform: scale(1.05);
+        }
+
+        button:disabled {
+            background: #7f8c8d;
+        }
+
+        #log {
+            margin-top: 20px;
+            border: 1px solid #7f8c8d;
+            padding: 10px;
+            max-height: 200px;
+            overflow: auto;
+            background: rgba(236, 240, 241, 0.1);
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+            }
+
+            to {
+                opacity: 1;
+            }
+        }
+
+        @keyframes slideDown {
+            from {
+                transform: translateY(-20px);
+                opacity: 0;
+            }
+
+            to {
+                transform: translateY(0);
+                opacity: 1;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>Klugscheiser</h1>
+        <p>Be the smartest person in the room! No effort required!</p>
+
+        <!-- Configuration Form -->
+        <label for="task">Task: </label>
+        <select id="task">
+            <option value="klugscheiser">Klugscheiser (Q&A)</option>
+            <option value="translation">Translation</option>
+        </select>
+        <br>
+        <!-- Remove language input for klugscheiser and add language selector for translation -->
+        <label for="languageSelector" id="languageLabel" style="display:none">Language: </label>
+        <select id="languageSelector" style="display:none">
+            <option value="bg">Bulgarian</option>
+            <option value="ca">Catalan</option>
+            <optgroup label="Chinese (Simplified)">
+                <option value="zh">Chinese (Mandarin)</option>
+                <option value="zh-CN">Chinese (Mandarin, Simplified)</option>
+                <option value="zh-Hans">Chinese (Mandarin, Simplified Alt)</option>
+            </optgroup>
+            <optgroup label="Chinese (Traditional)">
+                <option value="zh-TW">Chinese (Mandarin, Traditional)</option>
+                <option value="zh-Hant">Chinese (Mandarin, Traditional Alt)</option>
+            </optgroup>
+            <option value="zh-HK">Chinese (Cantonese, Traditional)</option>
+            <option value="cs">Czech</option>
+            <optgroup label="Danish">
+                <option value="da">Danish</option>
+                <option value="da-DK">Danish (DK)</option>
+            </optgroup>
+            <option value="nl">Dutch</option>
+            <optgroup label="English">
+                <option value="en">English</option>
+                <option value="en-US">English (US)</option>
+                <option value="en-AU">English (AU)</option>
+                <option value="en-GB">English (UK)</option>
+                <option value="en-NZ">English (NZ)</option>
+                <option value="en-IN">English (IN)</option>
+            </optgroup>
+            <option value="et">Estonian</option>
+            <option value="fi">Finnish</option>
+            <option value="nl-BE">Flemish</option>
+            <optgroup label="French">
+                <option value="fr">French</option>
+                <option value="fr-CA">French (CA)</option>
+            </optgroup>
+            <option value="de">German</option>
+            <option value="de-AT">German (AT)</option>
+            <option value="de-CH">German (CH)</option>
+            <option value="el">Greek</option>
+            <option value="he">Hebrew</option>
+            <option value="hi">Hindi</option>
+            <option value="hu">Hungarian</option>
+            <option value="is">Icelandic</option>
+            <option value="id">Indonesian</option>
+            <option value="it">Italian</option>
+            <option value="ja">Japanese</option>
+            <option value="ko">Korean</option>
+            <option value="lv">Latvian</option>
+            <option value="lt">Lithuanian</option>
+            <option value="ms">Malay</option>
+            <option value="mt">Maltese</option>
+            <option value="no">Norwegian</option>
+            <option value="pl">Polish</option>
+            <option value="pt">Portuguese</option>
+            <option value="pt-BR">Portuguese (BR)</option>
+            <option value="pt-PT">Portuguese (PT)</option>
+            <option value="ro">Romanian</option>
+            <option value="ru">Russian</option>
+            <option value="sr">Serbian</option>
+            <option value="sk">Slovak</option>
+            <option value="sl">Slovenian</option>
+            <option value="es">Spanish</option>
+            <option value="es-419">Spanish (Latin America)</option>
+            <option value="sv">Swedish</option>
+            <option value="th">Thai</option>
+            <option value="tr">Turkish</option>
+            <option value="uk">Ukrainian</option>
+            <option value="vi">Vietnamese</option>
+        </select>
+        <br>
+        <button id="startButton">Start</button>
+        <button id="stopButton" disabled>Stop</button>
+
+        <!-- Log Output -->
+        <div id="log" style="margin-top:20px; border:1px solid #7f8c8d; padding:10px; max-height:200px; overflow:auto;">
+        </div>
+    </div>
+    <script>
+        let audioContext, processor, input, ws, stream;
+        const CHUNK_SIZE = 1024;
+        const TARGET_SAMPLE_RATE = 16000; // target sample rate for server
+
+        const logDiv = document.getElementById('log');
+        function log(message) {
+            const p = document.createElement('p');
+            p.textContent = message;
+            logDiv.appendChild(p);
+            console.log(message);
+        }
+
+        // Hide language selector when task is klugscheiser
+        document.getElementById('task').addEventListener('change', () => {
+            const task = document.getElementById('task').value;
+            const languageLabel = document.getElementById('languageLabel');
+            const languageSelector = document.getElementById('languageSelector');
+            if (task === 'klugscheiser') {
+                languageLabel.style.display = 'none';
+                languageSelector.style.display = 'none';
+            } else {
+                languageLabel.style.display = 'inline';
+                languageSelector.style.display = 'inline';
+            }
+        });
+
+        // Start button click handler: sets up WebSocket and audio processing.
+        document.getElementById('startButton').addEventListener('click', async () => {
+            const task = document.getElementById('task').value;
+            const language = document.getElementById('languageSelector').value;
+
+            // Construct the WebSocket URI.
+            let wsUri = "";
+            if (task === "translation") {
+                wsUri = `ws://localhost:8765/${task}/${language}`;
+            } else {
+                wsUri = `ws://localhost:8765/${task}`;
+            }
+
+            // Open the WebSocket.
+            ws = new WebSocket(wsUri);
+            ws.binaryType = "arraybuffer";
+            ws.onopen = () => {
+                log("Connected to " + wsUri);
+            };
+            ws.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    if (data.answer) {
+                        log("Received answer: " + data.answer);
+                        speakText(data.answer);
+                    } else if (data.translation) {
+                        log("Received translation: " + data.translation);
+                        speakText(data.translation);
+                    }
+                } catch (err) {
+                    log("Error parsing message: " + err);
+                }
+            };
+            ws.onclose = () => {
+                log("WebSocket closed");
+            };
+            ws.onerror = (error) => {
+                log("WebSocket error: " + error);
+            };
+
+            // Request microphone access and set up audio processing.
+            try {
+                // Request a single-channel audio stream.
+                stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1 } });
+                // Create an AudioContext without forcing a sampleRate.
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                log("AudioContext sample rate: " + audioContext.sampleRate);
+                input = audioContext.createMediaStreamSource(stream);
+
+                // Create a ScriptProcessorNode to capture raw audio data.
+                processor = audioContext.createScriptProcessor(CHUNK_SIZE, 1, 1);
+                processor.onaudioprocess = function (e) {
+                    const inputData = e.inputBuffer.getChannelData(0);
+                    // Convert float samples (-1.0 to 1.0) to 16-bit PCM.
+                    let buffer = new Int16Array(inputData.length);
+                    for (let i = 0; i < inputData.length; i++) {
+                        let s = Math.max(-1, Math.min(1, inputData[i]));
+                        buffer[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+                    }
+
+                    // TODO: If your server requires 16 kHz, add resampling here.
+                    // Currently, this sends data at the device's native sample rate.
+
+                    // If the WebSocket is open, send the raw audio data.
+                    if (ws && ws.readyState === WebSocket.OPEN) {
+                        ws.send(buffer.buffer);
+                    }
+                };
+
+                input.connect(processor);
+                processor.connect(audioContext.destination);  // Necessary to start processing.
+                log("Microphone stream started");
+
+                document.getElementById('startButton').disabled = true;
+                document.getElementById('stopButton').disabled = false;
+            } catch (err) {
+                log("Error accessing microphone: " + err);
+            }
+        });
+
+        // Stop button click handler: stops audio processing and closes the WebSocket.
+        document.getElementById('stopButton').addEventListener('click', () => {
+            if (processor) {
+                processor.disconnect();
+            }
+            if (input) {
+                input.disconnect();
+            }
+            if (audioContext) {
+                audioContext.close();
+            }
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+            }
+            if (ws) {
+                ws.close();
+            }
+            log("Microphone stream stopped");
+            // Clear logs after stop
+            document.getElementById('log').innerHTML = "";
+            document.getElementById('startButton').disabled = false;
+            document.getElementById('stopButton').disabled = true;
+        });
+
+        // Use the Web Speech API to speak the given text.
+        function speakText(text) {
+            const utterance = new SpeechSynthesisUtterance(text);
+            window.speechSynthesis.speak(utterance);
+        }
+    </script>
+</body>
+
+</html>
