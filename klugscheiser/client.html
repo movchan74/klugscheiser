@@ -3,6 +3,8 @@
 
 <head>
     <meta charset="UTF-8">
+    <!-- Added meta viewport for mobile responsiveness -->
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Klugscheiser</title>
     <style>
         body {
@@ -86,6 +88,25 @@
             to {
                 transform: translateY(0);
                 opacity: 1;
+            }
+        }
+
+        /* Mobile responsiveness adjustments */
+        @media (max-width: 600px) {
+            .container {
+                max-width: 100%;
+                margin: 20px;
+                padding: 15px;
+            }
+
+            h1 {
+                font-size: 2rem;
+            }
+
+            label,
+            select,
+            button {
+                font-size: 1rem;
             }
         }
     </style>
@@ -174,20 +195,24 @@
             <option value="vi">Vietnamese</option>
         </select>
         <br>
-        <!-- New server selector -->
-        <label for="serverSelector">Server: </label>
-        <select id="serverSelector">
-            <option value="localhost">localhost</option>
-            <option value="oracle.rex-nominal.ts.net">oracle.rex-nominal.ts.net</option>
-        </select>
-        <br>
-        <!-- New server port selector -->
-        <label for="serverPort">Server Port: </label>
-        <select id="serverPort">
-            <option value="8765">8765</option>
-            <option value="9000">9000</option>
-        </select>
-        <br>
+        <!-- Replace existing server settings with Advanced settings -->
+        <details>
+            <summary>Advanced Server Settings</summary>
+            <!-- New server selector -->
+            <label for="serverSelector">Server: </label>
+            <select id="serverSelector">
+                <option value="oracle.rex-nominal.ts.net">oracle.rex-nominal.ts.net</option>
+                <option value="localhost">localhost</option>
+            </select>
+            <br>
+            <!-- New server port selector -->
+            <label for="serverPort">Server Port: </label>
+            <select id="serverPort">
+                <option value="8765">8765</option>
+                <option value="9000">9000</option>
+            </select>
+            <br>
+        </details>
         <button id="startButton">Start</button>
         <button id="stopButton" disabled>Stop</button>
 
