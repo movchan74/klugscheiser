@@ -6,14 +6,16 @@ and returns processed results (a translation or an answer) to the client.
 Configuration (task and language) is provided in the connection URL path.
 """
 
+import argparse
 import asyncio
 import json
 import logging
 import os
 import time
-from typing import Any, Dict, Optional, Tuple
+from typing import Dict, Optional, Tuple
 
 import websockets
+from aiohttp import web
 from deepgram import DeepgramClient, LiveOptions, LiveTranscriptionEvents
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -201,7 +203,8 @@ async def handle_client(webskt: websockets.WebSocketServerProtocol) -> None:
         smart_format=True,
         encoding="linear16",
         channels=1,
-        sample_rate=16000,
+        # sample_rate=16000,
+        sample_rate=48000,
         interim_results=True,
         utterance_end_ms="1000",
         vad_events=True,
@@ -245,14 +248,36 @@ async def handle_client(webskt: websockets.WebSocketServerProtocol) -> None:
         logging.info("Cleaned up Deepgram connection for client: %s", client_addr)
 
 
-async def main() -> None:
-    server = await websockets.serve(handle_client, "localhost", 8765)
-    logging.info("WebSocket Server started at ws://localhost:8765")
-    await server.wait_closed()
+async def handle_client_html(request):
+    html_path = os.path.join(os.path.dirname(__file__), "client.html")
+    return web.FileResponse(html_path)
+
+
+async def start_http_server(http_port: int):
+    app = web.Application()
+    app.router.add_get("/", handle_client_html)
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, "localhost", http_port)
+    await site.start()
+    logging.info("HTTP Server started at http://localhost:%s", http_port)
+    # Keep the HTTP server running forever.
+    while True:
+        await asyncio.sleep(3600)
+
+
+async def main(ws_port: int, http_port: int) -> None:
+    # Start both WebSocket and HTTP servers concurrently
+    ws_server = websockets.serve(handle_client, "localhost", ws_port)
+    await asyncio.gather(ws_server, start_http_server(http_port))
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Audio processing server")
+    parser.add_argument("--ws-port", type=int, default=8765, help="WebSocket port")
+    parser.add_argument("--http-port", type=int, default=8001, help="HTTP port")
+    args = parser.parse_args()
     try:
-        asyncio.run(main())
+        asyncio.run(main(args.ws_port, args.http_port))
     except KeyboardInterrupt:
         logging.info("Server shutdown via KeyboardInterrupt")

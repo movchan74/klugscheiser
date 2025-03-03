@@ -174,6 +174,20 @@
             <option value="vi">Vietnamese</option>
         </select>
         <br>
+        <!-- New server selector -->
+        <label for="serverSelector">Server: </label>
+        <select id="serverSelector">
+            <option value="localhost">localhost</option>
+            <option value="oracle.rex-nominal.ts.net">oracle.rex-nominal.ts.net</option>
+        </select>
+        <br>
+        <!-- New server port selector -->
+        <label for="serverPort">Server Port: </label>
+        <select id="serverPort">
+            <option value="8765">8765</option>
+            <option value="9000">9000</option>
+        </select>
+        <br>
         <button id="startButton">Start</button>
         <button id="stopButton" disabled>Stop</button>
 
@@ -212,13 +226,15 @@
         document.getElementById('startButton').addEventListener('click', async () => {
             const task = document.getElementById('task').value;
             const language = document.getElementById('languageSelector').value;
+            const server = document.getElementById('serverSelector').value;
+            const port = document.getElementById('serverPort').value; // new server port selector
 
             // Construct the WebSocket URI.
             let wsUri = "";
             if (task === "translation") {
-                wsUri = `ws://localhost:8765/${task}/${language}`;
+                wsUri = `ws://${server}:${port}/${task}/${language}`;
             } else {
-                wsUri = `ws://localhost:8765/${task}`;
+                wsUri = `ws://${server}:${port}/${task}`;
             }
 
             // Open the WebSocket.
