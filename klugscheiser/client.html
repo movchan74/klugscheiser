@@ -230,6 +230,8 @@
             const p = document.createElement('p');
             p.textContent = message;
             logDiv.appendChild(p);
+            // Added autoscroll
+            logDiv.scrollTop = logDiv.scrollHeight;
             console.log(message);
         }
 
