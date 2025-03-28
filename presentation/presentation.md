@@ -131,15 +131,21 @@ Does it actually work? I guess we'll find out together!
 -->
 
 ---
+layout: image-right
+image: assets/klugscheisser_qr_code.png
+backgroundSize: contain
+---
 
 # Final Thoughts
 
-- Klugscheisser: Turning ignorance into intelligence since today.
-- Impress friends, annoy coworkers, and confuse family members.
 - GitHub repo because sharing is caring!
 https://github.com/movchan74/klugscheiser
-
-
+- Recommended tools:
+  - Tailscale for secure remote access
+  - Deepgram for real-time transcription ($200 credit for free!)
+  - Slidev for making awesome presentations in Markdown
+  - Oracle Cloud Free Tier for free compute resources (4 CPUs, 24GB RAM for free!)
+- Find me if you want to chat about AI, Klugscheisser, smart glasses, or anything else!
 
 
 ---

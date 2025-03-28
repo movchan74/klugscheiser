@@ -11,11 +11,20 @@ Klugscheisser is an AI tool designed to make **you** the smartest person in any 
 - **Q&A Mode:** Answers every question you (pretend to) understand.
 - **Translator Mode:** Breaks language barriers, allowing you to misunderstand people internationally.
 
+See [presentation](presentation/presentation.pdf) for more details.
+
 # How to Use
 
 1. Clone the repository:
 
-2. Run the server:
+2. Create .env file in the root directory and add the following:
+
+```bash
+DEEPGRAM_API_KEY="<your-deepgram-api-key>"
+OPENAI_API_KEY="<your-openai-api-key>"
+```
+
+3. Run the server:
 
 ```bash
 uv run python ./klugscheiser/server.py --http-port 8000 --ws-port 8765
@@ -29,6 +38,8 @@ uv run python ./klugscheiser/server.py --http-port 8000 --ws-port 8765 --ssl-cer
 
 I could recomment to use Tailscale to deploy it on you local network and access it from anywhere with a secure connection.
 
-3. Go to `http://localhost:8000` in your browser. Choose locahost in advanced settings if you are running the server locally.
+4. Go to `http://localhost:8000` in your browser. Choose locahost in advanced settings if you are running the server locally.
 
-4. Be the smartest person in the room!
+5. Be the smartest person in the room!
+
+
