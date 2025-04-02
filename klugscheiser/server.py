@@ -13,12 +13,21 @@ import logging
 import os
 import ssl  # Added for https support
 import time
+import wave
 from typing import Dict, Optional, Tuple
 
 import websockets
 from aiohttp import web
-from deepgram import DeepgramClient, LiveOptions, LiveTranscriptionEvents
+from deepgram import (
+    DeepgramClient,
+    FileSource,
+    LiveOptions,
+    LiveTranscriptionEvents,
+    PrerecordedOptions,
+)
 from dotenv import load_dotenv
+from google import genai
+from google.genai import types
 from openai import OpenAI
 
 load_dotenv()
@@ -29,6 +38,9 @@ logging.basicConfig(
 # Initialize OpenAI client.
 openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 MODEL = "gpt-4o"
+
+gemini_client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+GEMINI_MODEL = "gemini-2.0-flash"
 
 
 def answer_question(context: str, question: str) -> str:
@@ -116,6 +128,7 @@ def parse_path(path: str) -> Tuple[str, str]:
     Expected path formats:
       - /klugscheiser
       - /translation/ru
+      - /walkie-talkie
     If language is not provided, a default is used.
     """
     parts = path.strip("/").split("/")
@@ -140,117 +153,116 @@ async def handle_client(webskt: websockets.WebSocketServerProtocol) -> None:
 
     # Create a Deepgram connection for this client.
     dg_client = DeepgramClient()
-    dg_connection = dg_client.listen.websocket.v("1")
-    context_container: Dict[str, str] = {"text": ""}
-    answer_queue: asyncio.Queue = asyncio.Queue()
-    loop = asyncio.get_running_loop()
 
-    def on_open(self, open, **kwargs):
-        logging.info("Connection Open")
+    with open("klugscheiser/story_system_prompt.md", "r") as f:
+        system_prompt = f.read()
 
-    def on_message(self, result, **kwargs):
-        sentence = result.channel.alternatives[0].transcript
-        if not sentence:
-            return
-        if result.is_final:
-            logging.info("Final transcript from %s: %s", client_addr, sentence)
-            if task == "klugscheiser":
-                answer = process_question(sentence, context_container)
-                context_container["text"] = (
-                    context_container.get("text", "") + sentence + " "
-                )
-                if answer:
-                    loop.call_soon_threadsafe(
-                        answer_queue.put_nowait, json.dumps({"answer": answer})
-                    )
-            elif task == "translation":
-                translation = process_translation(sentence)
-                if translation:
-                    loop.call_soon_threadsafe(
-                        answer_queue.put_nowait,
-                        json.dumps({"translation": translation}),
-                    )
-            else:
-                logging.error("Invalid task specified: %s", task)
-        else:
-            logging.info("Interim transcript from %s: %s", client_addr, sentence)
-
-    def on_metadata(self, metadata, **kwargs):
-        logging.info("Metadata: %s", metadata)
-
-    def on_speech_started(self, speech_started, **kwargs):
-        logging.info("Speech Started")
-
-    def on_close(self, close, **kwargs):
-        logging.info("Connection Closed")
-
-    def on_error(self, error, **kwargs):
-        logging.error("Handled Error: %s", error)
-
-    def on_unhandled(self, unhandled, **kwargs):
-        logging.warning("Unhandled Websocket Message: %s", unhandled)
-
-    # Register callbacks.
-    dg_connection.on(LiveTranscriptionEvents.Open, on_open)
-    dg_connection.on(LiveTranscriptionEvents.Transcript, on_message)
-    dg_connection.on(LiveTranscriptionEvents.Metadata, on_metadata)
-    dg_connection.on(LiveTranscriptionEvents.SpeechStarted, on_speech_started)
-    dg_connection.on(LiveTranscriptionEvents.Close, on_close)
-    dg_connection.on(LiveTranscriptionEvents.Error, on_error)
-    dg_connection.on(LiveTranscriptionEvents.Unhandled, on_unhandled)
-
-    # Configure Deepgram options based on client configuration.
-    options = LiveOptions(
-        smart_format=True,
-        encoding="linear16",
-        channels=1,
-        # sample_rate=16000,
-        sample_rate=48000,
-        interim_results=True,
-        utterance_end_ms="1000",
-        vad_events=True,
-        endpointing=100,
+    chat = gemini_client.chats.create(
+        model=GEMINI_MODEL,
+        config=types.GenerateContentConfig(
+            system_instruction=system_prompt,
+        ),
     )
-    if task == "klugscheiser":
-        options.model = "nova-3"
-        options.language = "en-US"
-        logging.info("Operating in Klugscheiser mode for client %s", client_addr)
-    elif task == "translation":
-        options.model = "nova-2"
-        options.language = language
-        logging.info(
-            "Operating in Translation mode from %s for client %s", language, client_addr
-        )
+
+    # Buffer for walkie-talkie mode
+    walkie_buffer = []
+
+    if task == "walkie-talkie":
+        # options.model = "nova-3"
+        # options.language = "en-US"
+        logging.info("Operating in Walkie-Talkie mode for client %s", client_addr)
     else:
         logging.error("Invalid task specified: %s", task)
-        return
-
-    addons = {"no_delay": "true"}
-    if not dg_connection.start(options, addons=addons):
-        logging.error("Failed to start Deepgram connection for client %s", client_addr)
         return
 
     try:
         async for msg in webskt:
             # If message is binary, treat it as an audio chunk.
             if isinstance(msg, bytes):
-                dg_connection.send(msg)
+                walkie_buffer.append(msg)
             else:
-                logging.info("Received non-binary message from %s", client_addr)
+                msg = json.loads(msg)
+                logging.info(
+                    "Received non-binary message from %s: %s", client_addr, msg
+                )
+
+                # Handle end of transmission for walkie-talkie mode
+                if task == "walkie-talkie" and msg.get("transmission_over"):
+                    logging.info("End of walkie-talkie transmission")
+                    if walkie_buffer:
+                        audio_data = b"".join(walkie_buffer)
+                        # 16-bit PCM
+                        with wave.open("output.wav", "wb") as wav_file:
+                            wav_file.setnchannels(1)
+                            wav_file.setsampwidth(2)
+                            wav_file.setframerate(48000)
+                            wav_file.writeframes(audio_data)
+
+                        # Read the audio file and prepare it for Deepgram
+                        with open("output.wav", "rb") as audio_file:
+                            audio_data = audio_file.read()
+
+                        payload: FileSource = {
+                            "buffer": audio_data,
+                        }
+
+                        walkie_buffer = []
+
+                        # STEP 2: Configure Deepgram options for audio analysis
+
+                        options = PrerecordedOptions(
+                            model="nova-3",
+                            smart_format=True,
+                        )
+
+                        # STEP 3: Call the transcribe_file method with the text payload and options
+
+                        response = dg_client.listen.rest.v("1").transcribe_file(
+                            payload, options
+                        )
+
+                        transcription = response["results"]["channels"][0][
+                            "alternatives"
+                        ][0]["transcript"]
+
+                        logging.info("Transcription: %s", transcription)
+
+                        response = chat.send_message(transcription)
+                        logging.info("Gemini Response: %s", response.text)
+
+                        await webskt.send(response.text)
+
+                        # full_conversation = " ".join(walkie_buffer)
+                        # # wait for the last transcription to be processed
+                        # await asyncio.sleep(0.5)
+                        # logging.info(
+                        #     "Processing full conversation: %s", full_conversation
+                        # )
+                        # # Process the entire conversation like in klugscheiser mode
+                        # # answer = process_question(full_conversation, context_container)
+                        # # context_container["text"] = (
+                        # #     context_container.get("text", "") + full_conversation + " "
+                        # # )
+                        # # if answer:
+                        # #     await webskt.send(json.dumps({"answer": answer}))
+                        # # Clear the buffer for next transmission
+                        # walkie_buffer.clear()
+                    else:
+                        logging.info("No audio data received for walkie-talkie mode")
 
             # Send any available results from Deepgram to the client.
-            while not answer_queue.empty():
-                reply = await answer_queue.get()
-                await webskt.send(reply)
+            # while not answer_queue.empty():
+            #     reply = await answer_queue.get()
+            #     await webskt.send(reply)
     except websockets.exceptions.ConnectionClosed:
         logging.info("Client %s disconnected", client_addr)
     finally:
-        dg_connection.finish()
+        # dg_connection.finish()
         logging.info("Cleaned up Deepgram connection for client: %s", client_addr)
 
 
 async def handle_client_html(request):
-    html_path = os.path.join(os.path.dirname(__file__), "client.html")
+    html_path = os.path.join(os.path.dirname(__file__), "walkie_talkie_client.html")
     return web.FileResponse(html_path)
 
 

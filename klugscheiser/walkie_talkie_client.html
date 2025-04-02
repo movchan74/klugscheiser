@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Walkie Talkie</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #34495e, #2c3e50);
+            margin: 0;
+            padding: 0;
+            color: #ecf0f1;
+            animation: fadeIn 1.5s ease-in;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 40px auto;
+            padding: 20px;
+            background: rgba(44, 62, 80, 0.85);
+            border-radius: 10px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+            animation: slideDown 0.8s ease-out;
+        }
+
+        h1 {
+            text-align: center;
+            font-size: 2.5rem;
+            margin-bottom: 20px;
+        }
+
+        button {
+            background: #e74c3c;
+            border: none;
+            color: #fff;
+            padding: 10px 20px;
+            font-size: 1rem;
+            border-radius: 4px;
+            margin: 10px 5px 0 0;
+            cursor: pointer;
+            transition: background 0.3s, transform 0.2s;
+        }
+
+        button:hover:not(:disabled) {
+            background: #c0392b;
+            transform: scale(1.05);
+        }
+
+        button:disabled {
+            background: #7f8c8d;
+            cursor: not-allowed;
+        }
+
+        #log {
+            margin-top: 20px;
+            border: 1px solid #7f8c8d;
+            padding: 10px;
+            max-height: 200px;
+            overflow: auto;
+            background: rgba(236, 240, 241, 0.1);
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+            }
+
+            to {
+                opacity: 1;
+            }
+        }
+
+        @keyframes slideDown {
+            from {
+                transform: translateY(-20px);
+                opacity: 0;
+            }
+
+            to {
+                transform: translateY(0);
+                opacity: 1;
+            }
+        }
+
+        @media (max-width: 600px) {
+            .container {
+                max-width: 100%;
+                margin: 20px;
+                padding: 15px;
+            }
+
+            h1 {
+                font-size: 2rem;
+            }
+
+            button {
+                font-size: 1rem;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>Walkie Talkie</h1>
+        <p>First, click "Connect" to establish the connection. Then, hold the "Talk" button to speak and release to end
+            transmission.</p>
+        <!-- Advanced Server Settings -->
+        <details>
+            <summary>Advanced Server Settings</summary>
+            <label for="serverSelector">Server: </label>
+            <select id="serverSelector">
+                <option value="oracle.rex-nominal.ts.net">oracle.rex-nominal.ts.net</option>
+                <option value="localhost">localhost</option>
+            </select>
+            <br>
+            <label for="serverPort">Server Port: </label>
+            <select id="serverPort">
+                <option value="8765">8765</option>
+                <option value="9000">9000</option>
+            </select>
+            <br>
+        </details>
+        <!-- Connection and Talk Buttons -->
+        <button id="connectButton">Connect</button>
+        <button id="talkButton" disabled>Push to Talk</button>
+        <div id="log"></div>
+    </div>
+    <script>
+        let audioContext, processor, input, ws, stream;
+        const CHUNK_SIZE = 1024;
+        const logDiv = document.getElementById('log');
+
+        function log(message) {
+            const p = document.createElement('p');
+            p.textContent = message;
+            logDiv.appendChild(p);
+            logDiv.scrollTop = logDiv.scrollHeight;
+            console.log(message);
+        }
+
+        // Establish WebSocket connection when Connect is clicked.
+        document.getElementById('connectButton').addEventListener('click', () => {
+            const server = document.getElementById('serverSelector').value;
+            const port = document.getElementById('serverPort').value;
+            // Adjust the WebSocket endpoint as needed.
+            let wsUri = `wss://${server}:${port}/walkie-talkie`;
+            ws = new WebSocket(wsUri);
+            ws.binaryType = "arraybuffer";
+
+            ws.onopen = () => {
+                log("Connected to " + wsUri);
+                // Enable the Talk button once connected.
+                document.getElementById('talkButton').disabled = false;
+                // Optionally disable Connect button to prevent re-connection.
+                document.getElementById('connectButton').disabled = true;
+            };
+            ws.onmessage = (event) => {
+                log("Received: " + event.data);
+                speakText(event.data);
+            };
+            ws.onclose = () => {
+                log("WebSocket closed");
+                // Disable Talk button if connection is lost.
+                document.getElementById('talkButton').disabled = true;
+                document.getElementById('connectButton').disabled = false;
+            };
+            ws.onerror = (error) => {
+                log("WebSocket error: " + error);
+            };
+        });
+
+        function startTransmission() {
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                console.log("WebSocket not connected.");
+                return;
+            }
+
+            navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1 } })
+                .then(streamObj => {
+                    stream = streamObj;
+                    if (!audioContext) {
+                        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                    }
+                    log("AudioContext sample rate: " + audioContext.sampleRate);
+                    input = audioContext.createMediaStreamSource(stream);
+
+                    // Create a ScriptProcessorNode to capture raw audio data.
+                    processor = audioContext.createScriptProcessor(CHUNK_SIZE, 1, 1);
+                    processor.onaudioprocess = function (e) {
+                        const inputData = e.inputBuffer.getChannelData(0);
+                        // Convert float samples (-1.0 to 1.0) to 16-bit PCM.
+                        let buffer = new Int16Array(inputData.length);
+                        for (let i = 0; i < inputData.length; i++) {
+                            let s = Math.max(-1, Math.min(1, inputData[i]));
+                            buffer[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+                        }
+
+                        // TODO: If your server requires 16 kHz, add resampling here.
+                        // Currently, this sends data at the device's native sample rate.
+
+                        // If the WebSocket is open, send the raw audio data.
+                        if (ws && ws.readyState === WebSocket.OPEN) {
+                            ws.send(buffer.buffer);
+                        }
+                    };
+
+                    input.connect(processor);
+                    processor.connect(audioContext.destination);  // Necessary to start processing.
+                    log("Microphone stream started");
+
+                })
+                .catch(err => {
+                    console.error("Error accessing microphone: " + err);
+                });
+        }
+
+        // Optional: Helper function to convert Float32 to 16-bit PCM.
+        function floatTo16BitPCM(input) {
+            let output = new Int16Array(input.length);
+            for (let i = 0; i < input.length; i++) {
+                let s = Math.max(-1, Math.min(1, input[i]));
+                output[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+            }
+            return output;
+        }
+
+        // Stop transmitting audio when Talk is released.
+        function stopTransmission() {
+            if (processor) {
+                processor.disconnect();
+                processor = null;
+            }
+            if (input) {
+                input.disconnect();
+                input = null;
+            }
+            if (audioContext && audioContext.state !== "closed") {
+                audioContext.close().then(() => {
+                    console.log("AudioContext closed successfully");
+                }).catch(err => {
+                    console.error("Error closing AudioContext:", err);
+                });
+                audioContext = null;
+            }
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+                stream = null;
+            }
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                // Send final message indicating transmission is over.
+                ws.send(JSON.stringify({ transmission_over: true }));
+            }
+            log("Transmission ended");
+        }
+
+        const talkButton = document.getElementById('talkButton');
+
+        // Listen for mouse events.
+        talkButton.addEventListener('mousedown', () => {
+            startTransmission();
+            talkButton.textContent = "Talking...";
+        });
+        talkButton.addEventListener('mouseup', () => {
+            stopTransmission();
+            talkButton.textContent = "Push to Talk";
+        });
+
+        // Listen for touch events on mobile devices.
+        talkButton.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            startTransmission();
+            talkButton.textContent = "Talking...";
+        });
+        talkButton.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            stopTransmission();
+            talkButton.textContent = "Push to Talk";
+        });
+
+        function speakText(text) {
+            const utterance = new SpeechSynthesisUtterance(text);
+            window.speechSynthesis.speak(utterance);
+        }
+    </script>
+</body>
+
+</html>
