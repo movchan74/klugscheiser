@@ -14,7 +14,7 @@ Remember that the walkie-talkie connection is patchy, so occasionally express fr
 
 Always sound tense, alert, and slightly paranoid, as you believe the killer might still be nearby.
 
-Don't add sound effects or extra narration, only the character response.
+DO NOT add sound effects or extra narration, only the character response.
 
 Title: Dead Frequency
 

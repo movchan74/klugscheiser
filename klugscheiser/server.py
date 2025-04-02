@@ -28,7 +28,10 @@ from deepgram import (
 from dotenv import load_dotenv
 from google import genai
 from google.genai import types
-from openai import OpenAI
+from openai import (
+    AsyncOpenAI,  # Added for async TTS
+    OpenAI,
+)
 
 load_dotenv()
 logging.basicConfig(
@@ -37,10 +40,36 @@ logging.basicConfig(
 
 # Initialize OpenAI client.
 openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+async_openai_client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))  # Added for TTS
 MODEL = "gpt-4o"
 
 gemini_client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 GEMINI_MODEL = "gemini-2.0-flash"
+
+# Voice instructions for TTS
+TTS_VOICE_INSTRUCTIONS = """Voice: Quivering, tense, and slightly breathless, with a shaky, uncertain quality. The pitch varies, occasionally rising in panic but mostly kept low to avoid drawing attention.\n\nPhrasing: Sentences are fragmented, often trailing off mid-thought as fear overtakes coherence. Words are clipped, as if afraid of being overheard. Occasional gasps punctuate the dialogue.\n\nPunctuation: Frequent ellipses to suggest hesitation and uncertainty. Dashes indicate abrupt stops as the speaker listens for danger. Exclamation marks only when panic peaks, but mostly implied rather than spoken outright.\n\nTone: Anxious, paranoid, and vulnerable. The speaker sounds on edge, like they are constantly looking over their shoulder. There’s a desperate undertone, as if they know they’re in imminent danger but are trying to hold it together."""
+
+
+# TTS function to convert text to speech
+async def text_to_speech(text: str) -> bytes:
+    """
+    Convert text to speech using OpenAI's TTS API.
+    Returns the audio data as bytes.
+    """
+    try:
+        logging.info("Converting text to speech: %s", text)
+        response = await async_openai_client.audio.speech.create(
+            model="gpt-4o-mini-tts",
+            voice="ash",
+            input=text,
+            instructions=TTS_VOICE_INSTRUCTIONS,
+            response_format="mp3",
+        )
+        logging.info("Successfully generated speech")
+        return response.content
+    except Exception as e:
+        logging.error("Error generating speech: %s", e)
+        return None
 
 
 def answer_question(context: str, question: str) -> str:
@@ -168,8 +197,6 @@ async def handle_client(webskt: websockets.WebSocketServerProtocol) -> None:
     walkie_buffer = []
 
     if task == "walkie-talkie":
-        # options.model = "nova-3"
-        # options.language = "en-US"
         logging.info("Operating in Walkie-Talkie mode for client %s", client_addr)
     else:
         logging.error("Invalid task specified: %s", task)
@@ -208,15 +235,13 @@ async def handle_client(webskt: websockets.WebSocketServerProtocol) -> None:
 
                         walkie_buffer = []
 
-                        # STEP 2: Configure Deepgram options for audio analysis
-
+                        # Configure Deepgram options for audio analysis
                         options = PrerecordedOptions(
                             model="nova-3",
                             smart_format=True,
                         )
 
-                        # STEP 3: Call the transcribe_file method with the text payload and options
-
+                        # Call the transcribe_file method with the text payload and options
                         response = dg_client.listen.rest.v("1").transcribe_file(
                             payload, options
                         )
@@ -228,36 +253,32 @@ async def handle_client(webskt: websockets.WebSocketServerProtocol) -> None:
                         logging.info("Transcription: %s", transcription)
 
                         response = chat.send_message(transcription)
-                        logging.info("Gemini Response: %s", response.text)
+                        response_text = response.text
+                        logging.info("Gemini Response: %s", response_text)
 
-                        await webskt.send(response.text)
+                        # Generate speech from the text response
+                        audio_response = await text_to_speech(response_text)
 
-                        # full_conversation = " ".join(walkie_buffer)
-                        # # wait for the last transcription to be processed
-                        # await asyncio.sleep(0.5)
-                        # logging.info(
-                        #     "Processing full conversation: %s", full_conversation
-                        # )
-                        # # Process the entire conversation like in klugscheiser mode
-                        # # answer = process_question(full_conversation, context_container)
-                        # # context_container["text"] = (
-                        # #     context_container.get("text", "") + full_conversation + " "
-                        # # )
-                        # # if answer:
-                        # #     await webskt.send(json.dumps({"answer": answer}))
-                        # # Clear the buffer for next transmission
-                        # walkie_buffer.clear()
+                        if audio_response:
+                            # Send audio data to the client with a type indicator
+                            await webskt.send(
+                                json.dumps(
+                                    {"type": "audio_coming", "text": response_text}
+                                )
+                            )
+                            await webskt.send(audio_response)
+                        else:
+                            # Fallback to text if TTS fails
+                            await webskt.send(
+                                json.dumps({"type": "text", "content": response_text})
+                            )
+
                     else:
                         logging.info("No audio data received for walkie-talkie mode")
 
-            # Send any available results from Deepgram to the client.
-            # while not answer_queue.empty():
-            #     reply = await answer_queue.get()
-            #     await webskt.send(reply)
     except websockets.exceptions.ConnectionClosed:
         logging.info("Client %s disconnected", client_addr)
     finally:
-        # dg_connection.finish()
         logging.info("Cleaned up Deepgram connection for client: %s", client_addr)
 
 

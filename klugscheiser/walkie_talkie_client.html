@@ -132,6 +132,9 @@
         let audioContext, processor, input, ws, stream;
         const CHUNK_SIZE = 1024;
         const logDiv = document.getElementById('log');
+        let audioQueue = []; // Queue to store audio chunks
+        let isPlaying = false; // Flag to track if audio is currently playing
+        let expectingAudioData = false; // Flag to indicate we're expecting binary audio
 
         function log(message) {
             const p = document.createElement('p');
@@ -156,21 +159,91 @@
                 document.getElementById('talkButton').disabled = false;
                 // Optionally disable Connect button to prevent re-connection.
                 document.getElementById('connectButton').disabled = true;
+
+                // Create audio context for playback
+                if (!audioContext) {
+                    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                }
             };
-            ws.onmessage = (event) => {
-                log("Received: " + event.data);
-                speakText(event.data);
+
+            ws.onmessage = async (event) => {
+                if (expectingAudioData && event.data instanceof ArrayBuffer) {
+                    // Handle binary audio data
+                    log("Received audio data");
+                    playAudioFromServer(event.data);
+                    expectingAudioData = false;
+                } else {
+                    // Handle JSON messages
+                    try {
+                        const jsonData = JSON.parse(event.data);
+                        log("Received message: " + JSON.stringify(jsonData));
+
+                        if (jsonData.type === "audio_coming") {
+                            // Next message will be binary audio data
+                            expectingAudioData = true;
+                            log("RECEIVED: " + jsonData.text);
+                        } else if (jsonData.type === "text") {
+                            // Fall back to browser TTS if server sends text
+                            log("Received text: " + jsonData.content);
+                            speakText(jsonData.content);
+                        }
+                    } catch (e) {
+                        // If JSON parsing fails, it's probably a direct text message
+                        log("Received: " + event.data);
+                        speakText(event.data);
+                    }
+                }
             };
+
             ws.onclose = () => {
                 log("WebSocket closed");
                 // Disable Talk button if connection is lost.
                 document.getElementById('talkButton').disabled = true;
                 document.getElementById('connectButton').disabled = false;
             };
+
             ws.onerror = (error) => {
                 log("WebSocket error: " + error);
             };
         });
+
+        // Function to play audio data received from server
+        async function playAudioFromServer(audioData) {
+            try {
+                // Ensure audio context is initialized
+                if (!audioContext) {
+                    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                }
+
+                // Resume audio context if it's suspended (browser autoplay policy)
+                if (audioContext.state === 'suspended') {
+                    await audioContext.resume();
+                }
+
+                // Decode the audio data (MP3 format from server)
+                audioContext.decodeAudioData(audioData, (buffer) => {
+                    // Create audio source
+                    const source = audioContext.createBufferSource();
+                    source.buffer = buffer;
+                    source.connect(audioContext.destination);
+
+                    // Start playback
+                    source.start(0);
+                    log("Playing audio response");
+
+                    // Optional: You can add an event for when playback ends
+                    source.onended = () => {
+                        log("Audio playback ended");
+                    };
+                }, (error) => {
+                    log("Error decoding audio data: " + error);
+                });
+            } catch (error) {
+                log("Error playing audio: " + error);
+                // Fallback: If audio playback fails, we might still have text
+                speakText("Sorry, there was an issue playing the audio response");
+            }
+        }
 
         function startTransmission() {
             if (!ws || ws.readyState !== WebSocket.OPEN) {
@@ -280,6 +353,7 @@
             talkButton.textContent = "Push to Talk";
         });
 
+        // Fallback function for browser speech synthesis
         function speakText(text) {
             const utterance = new SpeechSynthesisUtterance(text);
             window.speechSynthesis.speak(utterance);
